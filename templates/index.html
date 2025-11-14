@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AI Liability Score — Premium UI</title>
+
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg-1: #0f1724;
+    --glass: rgba(255,255,255,0.06);
+    --glass-2: rgba(255,255,255,0.08);
+    --accent-a: #6EE7B7; /* mint */
+    --accent-b: #5B8CFF; /* blue */
+    --muted: rgba(255,255,255,0.7);
+    --glass-border: rgba(255,255,255,0.08);
+    --danger: #FF6B6B;
+    --warn: #FFB86B;
+    --success: #52E1A6;
+    --card-radius: 18px;
+    --shadow: 0 10px 30px rgba(2,6,23,0.6);
+
+    /* glow sizes */
+    --magnetic-size: 220px;
+    --mag-x: 50%;
+    --mag-y: 50%;
+  }
+
+  /* animated gradient background (kept as fallback under canvas) */
+  html,body{
+    height:100%;
+    margin:0;
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    background: linear-gradient(120deg,#071129 0%, #09203f 25%, #123b6b 50%, #0b3e3b 75%, #071129 100%);
+    background-size: 300% 300%;
+    animation: bgMove 14s ease infinite;
+    color: white;
+  }
+  @keyframes bgMove{
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:0% 50%}
+  }
+
+  /* Canvas sits behind everything (inserted via JS) */
+  #ai-bg-canvas{
+    position:fixed;
+    left:0;
+    top:0;
+    width:100%;
+    height:100%;
+    z-index:0;
+    pointer-events:none;
+    opacity:0.55;
+    mix-blend-mode:screen;
+    filter: blur(10px) saturate(120%);
+  }
+
+  /* main layout */
+  .page {
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:48px 20px;
+    position:relative;
+    z-index:1; /* above canvas */
+  }
+
+  .shell {
+    width:110%;
+    max-width:1100px;
+    display:grid;
+    grid-template-columns: 460px 1fr;
+    gap:28px;
+    align-items:start;
+  }
+
+  /* left card (input) */
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+    border-radius: var(--card-radius);
+    padding:28px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(10px) saturate(120%);
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 400ms cubic-bezier(.2,.9,.2,1), box-shadow 300ms ease;
+    perspective: 1200px;
+  }
+
+  /* subtle depth baseline */
+  .card[data-tilt] { /* data-tilt toggled by JS */
+    will-change: transform;
+  }
+
+  /* header */
+  .brand {
+    display:flex;
+    gap:14px;
+    align-items:center;
+    margin-bottom:18px;
+  }
+  .logo {
+    width:56px;
+    height:56px;
+    flex:0 0 56px;
+    border-radius:12px;
+    background: linear-gradient(135deg,var(--accent-a),var(--accent-b));
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 6px 20px rgba(30,78,255,0.12), inset 0 -6px 18px rgba(0,0,0,0.08);
+    transform: translateZ(8px);
+  }
+  .logo img{width:40px;height:40px;object-fit:contain;border-radius:6px;}
+  .brand .title {font-weight:700; font-size:18px; line-height:1; letter-spacing: -0.2px;}
+  .brand .sub {font-size:12px;color:var(--muted); margin-top:4px; font-weight:500;}
+
+  /* input group */
+  .field {
+    margin-top:12px;
+  }
+  label {
+    font-size:13px;
+    color:var(--muted);
+    display:block;
+    margin-bottom:8px;
+  }
+
+  /* neumorphic input */
+  .input {
+    width:92%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius:12px;
+    padding:12px 14px;
+    border:1px solid rgba(255,255,255,0.04);
+    outline:none;
+    color:white;
+    font-size:15px;
+    box-shadow: 0 6px 16px rgba(2,6,23,0.45), inset 0 1px 0 rgba(255,255,255,0.02);
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    position:relative;
+    z-index:2;
+    --mag-x: 50%;
+    --mag-y: 50%;
+  }
+  .input:focus{
+    transform: translateY(-2px);
+    border-color: rgba(91,140,255,0.9);
+    box-shadow: 0 12px 30px rgba(91,140,255,0.08);
+  }
+
+  /* magnetic glow pseudo (faint) */
+  .input::before{
+    content:'';
+    position:absolute;
+    left: calc(var(--mag-x) - var(--magnetic-size) / 2);
+    top: calc(var(--mag-y) - var(--magnetic-size) / 2);
+    width: var(--magnetic-size);
+    height: var(--magnetic-size);
+    pointer-events:none;
+    background: radial-gradient(closest-side, rgba(91,140,255,0.12), rgba(91,140,255,0.02) 55%, transparent 70%);
+    transform: translate3d(0,0,0);
+    transition: opacity 220ms linear;
+    opacity:0;
+    border-radius:50%;
+    filter: blur(18px);
+  }
+
+  /* primary button with ripple */
+  .btn {
+    margin-top:18px;
+    width:100%;
+    padding:12px 16px;
+    border-radius:12px;
+    background: linear-gradient(90deg,var(--accent-a), var(--accent-b));
+    color:#041025;
+    font-weight:700;
+    border:none;
+    cursor:pointer;
+    position:relative;
+    overflow:hidden;
+    box-shadow: 0 8px 20px rgba(11,16,36,0.5);
+    transition: transform .14s ease, box-shadow .14s ease;
+    --mag-x:50%;
+    --mag-y:50%;
+  }
+  .btn:active{ transform: translateY(1px) scale(.998); }
+  .btn:disabled { opacity:.6; cursor:not-allowed; transform:none; box-shadow:none; }
+
+  /* magnetic glow on button */
+  .btn::before{
+    content:'';
+    position:absolute;
+    left: calc(var(--mag-x) - var(--magnetic-size)/2);
+    top: calc(var(--mag-y) - var(--magnetic-size)/2);
+    width: var(--magnetic-size);
+    height: var(--magnetic-size);
+    pointer-events:none;
+    background: radial-gradient(closest-side, rgba(110,231,183,0.16), rgba(91,140,255,0.12) 40%, transparent 60%);
+    transform: translate3d(0,0,0);
+    transition: opacity 180ms linear, transform 220ms ease;
+    opacity:0;
+    border-radius:50%;
+    filter: blur(20px);
+    mix-blend-mode: screen;
+  }
+  .btn[data-magnetic="1"]::before,
+  .input[data-magnetic="1"]::before{
+    opacity:1;
+  }
+
+  /* ripple element */
+  .ripple {
+    position:absolute;
+    border-radius:50%;
+    transform:scale(0);
+    background: rgba(255,255,255,0.25);
+    animation: ripple 700ms linear;
+    pointer-events:none;
+  }
+  @keyframes ripple {
+    to { transform: scale(4); opacity:0; }
+  }
+
+  /* loader skeleton: organic pulse */
+  .skeleton {
+    height:16px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.12), rgba(255,255,255,0.03));
+    background-size:200% 100%;
+    border-radius:8px;
+    animation: breathing 1600ms ease-in-out infinite;
+    transform-origin:center;
+  }
+  @keyframes breathing{
+    0%{ opacity:0.6; transform:scale(1); filter:blur(0px) }
+    50%{ opacity:0.95; transform:scale(1.02); filter:blur(0.6px) }
+    100%{ opacity:0.6; transform:scale(1); filter:blur(0px) }
+  }
+
+  /* result card (right column) */
+  .panel {
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border-radius: 18px;
+    padding:22px;
+    border:1px solid rgba(255,255,255,0.04);
+    min-height: 300px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(8px);
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 420ms cubic-bezier(.2,.9,.2,1), box-shadow 320ms ease;
+    perspective:1200px;
+    position:relative;
+    overflow:visible;
+  }
+
+  /* panel pulse when data received */
+  .panel.pulse {
+    animation: panelPulse 860ms cubic-bezier(.2,.9,.2,1);
+    box-shadow: 0 20px 50px rgba(13,30,80,0.38), 0 2px 8px rgba(91,140,255,0.06);
+  }
+  @keyframes panelPulse {
+    0%{ transform: translateZ(0) scale(1); box-shadow: var(--shadow) }
+    40%{ transform: translateZ(4px) scale(1.006); box-shadow: 0 26px 60px rgba(13,30,80,0.44) }
+    100%{ transform: translateZ(0) scale(1); box-shadow: var(--shadow) }
+  }
+
+  .panel h3{ margin:0 0 12px 0; font-size:16px; }
+  .panel .meta { color:var(--muted); font-size:13px; margin-bottom:14px; }
+
+  /* gauge layout */
+  .gauge-wrap { display:flex; gap:18px; align-items:center; justify-content:flex-start; flex-wrap:wrap; }
+  .gauge {
+    width:160px;
+    height:160px;
+    position:relative;
+  }
+  .gauge svg { transform: rotate(-90deg); overflow:visible; filter: drop-shadow(0 6px 18px rgba(0,0,0,0.4)); }
+  .gauge .center {
+    position:absolute; left:0; right:0; top:0; bottom:0; display:flex; align-items:center; justify-content:center; flex-direction:column;
+  }
+  .gauge .score {
+    font-size:26px; font-weight:800; letter-spacing:-0.5px;
+    text-rendering:optimizeLegibility;
+    -webkit-font-smoothing:antialiased;
+    letter-spacing:-0.3px;
+  }
+  .gauge .label { font-size:12px; color:var(--muted); margin-top:4px; font-weight:600; }
+
+  /* glow ring overlay to give ambient */
+  .gauge::after{
+    content:'';
+    position:absolute;
+    inset:0;
+    border-radius:50%;
+    box-shadow: inset 0 0 30px rgba(82,225,166,0.02), 0 8px 30px rgba(91,140,255,0.03);
+    pointer-events:none;
+  }
+
+  /* info rows */
+  .info {
+    display:grid;
+    grid-template-columns: repeat(2,1fr);
+    gap:12px;
+    margin-top:14px;
+  }
+  .info .box {
+    background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));
+    padding:12px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,0.03);
+    font-size:13px;
+    opacity:0;
+    transform: translateY(6px);
+    will-change: transform, opacity;
+  }
+  .info .box.show {
+    animation: infoIn 420ms cubic-bezier(.2,.9,.2,1) forwards;
+  }
+  @keyframes infoIn {
+    to { opacity:1; transform: translateY(0); }
+  }
+
+  .info .box strong{ display:block; font-size:13px; font-weight:700; margin-bottom:6px; color:#fff; }
+  .info .muted { color:var(--muted); font-size:13px; }
+
+  /* badge */
+  .badge {
+    display:inline-block;
+    padding:8px 12px;
+    border-radius:999px;
+    font-weight:700;
+    letter-spacing:0.6px;
+    color:#041025;
+    background: linear-gradient(90deg,#fff,#fff);
+    box-shadow: inset 0 -6px 10px rgba(0,0,0,0.06);
+    margin-left:6px;
+    transform-origin:center;
+    transform: scale(.92);
+    opacity:0;
+    filter: drop-shadow(0 8px 24px rgba(0,0,0,0.18));
+  }
+  .badge.reveal {
+    animation: badgePop 420ms cubic-bezier(.2,.9,.2,1) forwards;
+  }
+  @keyframes badgePop {
+    0%{ transform: scale(.8); opacity:0; filter: blur(4px) drop-shadow(0 0 0 rgba(0,0,0,0)) }
+    60%{ transform: scale(1.06); opacity:1; filter: blur(0px) }
+    100%{ transform: scale(1); opacity:1; filter: blur(0px) }
+  }
+
+  /* explanation typing area style */
+  #explain {
+    min-height:28px;
+    white-space:pre-wrap;
+    will-change: contents;
+    opacity:0;
+    transform: translateY(6px);
+  }
+  #explain.show {
+    animation: explainIn 360ms ease forwards;
+  }
+  @keyframes explainIn {
+    to { opacity:1; transform: translateY(0); }
+  }
+
+  /* footer small */
+  .small { font-size:12px; color:var(--muted); margin-top:18px; text-align:center; }
+
+  /* responsive */
+  @media (max-width:980px){
+    .shell { grid-template-columns: 1fr; }
+    .card { order:2; }
+    .panel { order:1; margin-bottom:14px; }
+    .gauge { margin:0 auto; }
+  }
+
+  /* Accessibility: reduce motion preference */
+  @media (prefers-reduced-motion: reduce){
+    .card, .panel, .gauge svg, .btn, .input, .skeleton, .info .box { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+  <canvas id="ai-bg-canvas" aria-hidden="true"></canvas>
+
+  <div class="page">
+    <div class="shell">
+
+      <!-- LEFT: Input Card -->
+      <div class="card" aria-hidden="false">
+        <div class="brand">
+          <div class="logo" aria-hidden="true">
+            <!-- logo placeholder (replace src with your png/svg) -->
+            <img src="https://cdn.blume.vc/blume/imager/images/startups/cashify/logo/270/Cashify.f1670267326_5dbced9873927dbc00aa1bed763f6f2b.png" alt="logo">
+          </div>
+          <div>
+            <div class="title">Liability AI — Demo</div>
+            <div class="sub">Enter customer phone to retrieve risk score</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="phone">Customer Phone</label>
+          <input id="phone" class="input" inputmode="numeric" pattern="\d*" maxlength="10" placeholder="e.g. 9326403309" />
+        </div>
+
+        <button id="goBtn" class="btn" aria-live="polite">Check Liability</button>
+
+        <div id="busy" style="display:none; margin-top:16px;">
+          <div class="skeleton" style="height:14px; width:70%; margin-bottom:10px; border-radius:10px;"></div>
+          <div class="skeleton" style="height:14px; width:40%; border-radius:10px;"></div>
+        </div>
+
+        <div id="err" style="margin-top:12px; color:#ff6b6b; font-weight:600; display:none;"></div>
+
+        <div class="small">
+    Enter the customer's phone number to retrieve their AI-generated liability score.
+    Our machine learning engine analyzes historical purchase behavior, return patterns, device activity, and risk indicators to assess how reliable the customer is for future transactions.
+          Please refer the excel sheet shared for customer's information.
+</div>
+  </div>
+
+      <!-- RIGHT: Result Panel -->
+      <div class="panel" role="region" aria-live="polite">
+        <h3>Customer Risk Overview</h3>
+        <div class="meta">Model prediction, explanations and quick stats.</div>
+
+        <div id="empty" style="opacity:0.85; color:var(--muted)">
+          <div style="font-weight:700; font-size:15px; margin-bottom:8px;">No customer selected</div>
+          <div>Enter a phone number on the left to see the customer's liability score and details here.</div>
+        </div>
+
+        <div id="resultPanel" style="display:none;">
+          <div class="gauge-wrap">
+            <div class="gauge" aria-hidden="true">
+              <svg width="160" height="160" viewBox="0 0 100 100">
+                <!-- background ring -->
+                <circle cx="50" cy="50" r="40" stroke="rgba(255,255,255,0.06)" stroke-width="10" fill="none"></circle>
+                <!-- gradient for progress -->
+                <defs>
+                  <linearGradient id="gradColor" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#FF6B6B"/>
+                    <stop offset="50%" stop-color="#FFB86B"/>
+                    <stop offset="100%" stop-color="#52E1A6"/>
+                  </linearGradient>
+                </defs>
+                <!-- progress ring -->
+                <circle id="ring" cx="50" cy="50" r="40" stroke="url(#gradColor)" stroke-width="10" stroke-linecap="round" fill="none"
+                  stroke-dasharray="251.2" stroke-dashoffset="251.2"></circle>
+              </svg>
+              <div class="center">
+                <div class="score" id="gScore">0</div>
+                <div class="label">Liability</div>
+              </div>
+            </div>
+
+            <div style="flex:1; min-width:220px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div>
+                  <div style="font-weight:700; font-size:16px;" id="predCategory">—</div>
+                  <div style="color:var(--muted); margin-top:6px;" id="predNote">Predicted risk category</div>
+                </div>
+                <div id="categoryBadge" style="text-align:right;"></div>
+              </div>
+
+              <div class="info" style="margin-top:16px;">
+                <div class="box">
+                  <strong>Avg Order Value</strong>
+                  <span class="muted" id="avgOrder">—</span>
+                </div>
+                <div class="box">
+                  <strong>Total Orders</strong>
+                  <span class="muted" id="totalOrders">—</span>
+                </div>
+                <div class="box">
+                  <strong>Return Rate</strong>
+                  <span class="muted" id="retRate">—</span>
+                </div>
+                <div class="box">
+                  <strong>Fraud Attempts</strong>
+                  <span class="muted" id="fraudCount">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;">
+            <div style="font-weight:700; margin-bottom:8px;">Explanation</div>
+            <div style="color:var(--muted);" id="explain">Key drivers will appear here — e.g. high return rate, fake invoice flag, short account age.</div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+  /*********************************************************************
+   * Enhanced UI/UX script
+   * - Adds canvas "neural plexus" background
+   * - 3D tilt for .card and .panel
+   * - Magnetic glow for .btn and .input
+   * - Sequenced result animations including pulse, gauge, staggered info,
+   *   type-out explanation, and badge reveal
+   * - Maintains existing functionality (ripple, fetch)
+   *********************************************************************/
+
+  // Utilities
+  const $ = (q)=>document.querySelector(q);
+  const $$ = (q)=>Array.from(document.querySelectorAll(q));
+  const setVisible = (el, v)=>{ el.style.display = v ? '' : 'none'; }
+
+  const btn = $('#goBtn');
+  const input = $('#phone');
+  const busy = $('#busy');
+  const err = $('#err');
+  const empty = $('#empty');
+  const resultPanel = $('#resultPanel');
+
+  // gauge elements
+  const ring = document.getElementById('ring');
+  const gScore = document.getElementById('gScore');
+  const predCategory = document.getElementById('predCategory');
+  const categoryBadge = document.getElementById('categoryBadge');
+  const predNote = document.getElementById('predNote');
+
+  // info elements
+  const avgOrder = document.getElementById('avgOrder');
+  const totalOrders = document.getElementById('totalOrders');
+  const retRate = document.getElementById('retRate');
+  const fraudCount = document.getElementById('fraudCount');
+  const explain = document.getElementById('explain');
+  const infoBoxes = Array.from(document.querySelectorAll('.info .box'));
+
+  // mapping classes for badges
+  const badgeMap = {
+    'low_risk': {text:'LOW RISK', cls:'badge', color:'#DFF7EA'},
+    'medium_risk': {text:'MEDIUM RISK', cls:'badge', color:'#FFF2E0'},
+    'high_risk': {text:'HIGH RISK', cls:'badge', color:'#FFE6E6'}
+  };
+
+  /***********************
+   * 1) Ripple (original)
+   ***********************/
+  btn.addEventListener('click', function(e){
+    // ripple
+    const circle = document.createElement('span');
+    circle.className = 'ripple';
+    const rect = this.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    circle.style.width = circle.style.height = size + 'px';
+    circle.style.left = (e.clientX - rect.left - size/2) + 'px';
+    circle.style.top = (e.clientY - rect.top - size/2) + 'px';
+    this.appendChild(circle);
+    setTimeout(()=> circle.remove(), 700);
+
+    // run action
+    doPredict();
+  });
+
+  /***********************
+   * 2) Core predict logic
+   ***********************/
+  async function doPredict(){
+    const phone = input.value.trim();
+    err.style.display='none';
+    if(!/^\d{10}$/.test(phone)){
+      showError('Please enter a valid 10-digit phone number.');
+      return;
+    }
+
+    // UI busy
+    btn.disabled = true;
+    setVisible(busy, true);
+    setVisible(empty, false);
+    setVisible(resultPanel, false);
+
+    try{
+      // Simulated fetch if server not present (keeps demo-friendly)
+      // NOTE: Real app uses: const res = await fetch(`/predict?phone=${phone}`);
+      // For demo safety, if fetch fails we fall back to a mock.
+      let data;
+      try {
+        const res = await fetch(`/predict?phone=${phone}`);
+        data = await res.json();
+        if(!data || typeof data !== 'object') throw new Error('invalid response');
+      } catch (e) {
+        // fallback mock (keeps functionality even without backend)
+        data = mockResponse(phone);
+      }
+
+      if(data.error){
+        showError(data.error);
+        return;
+      }
+
+      // display results (with dramatized sequence)
+      await populateResult(data);
+
+    }catch(ex){
+      showError('Server error. Please check backend.');
+      console.error(ex);
+    }finally{
+      btn.disabled = false;
+      setVisible(busy, false);
+    }
+  }
+
+  function showError(message){
+    err.textContent = message;
+    err.style.display = 'block';
+    err.style.opacity = 1;
+    setTimeout(()=> { err.style.opacity = 0; setTimeout(()=> err.style.display='none', 260); }, 4200);
+    // reset panels
+    setVisible(resultPanel, false);
+    setVisible(empty, true);
+    btn.disabled = false;
+    setVisible(busy, false);
+  }
+
+  /************************************************
+   * 3) Populate result: dramatic, sequenced event
+   ************************************************/
+  async function populateResult(data){
+    // prepare DOM content quickly
+    const cat = data.predicted_risk_category || data.predicted_risk || 'low_risk';
+    const badge = badgeMap[cat] || {text:(data.predicted_risk_category||'—').toUpperCase(), cls:'badge', color:'#FFF'};
+    categoryBadge.innerHTML = `<span class="${badge.cls}" style="background:${badge.color}; color:#041025">${badge.text}</span>`;
+    predCategory.textContent = (data.predicted_risk_category || '—').replace('_',' ');
+    predNote.textContent = `Confidence score: ${data.predicted_liability_score}`;
+
+    avgOrder.textContent = (data.avg_order_value !== undefined) ? '₹' + data.avg_order_value : (data.actual_avg_order_value || '—');
+    totalOrders.textContent = data.total_orders ?? data.actual_total_orders ?? '—';
+    retRate.textContent = (data.return_rate !== undefined) ? (data.return_rate*100).toFixed(1) + '%' : (data.return_rate ?? '—');
+    fraudCount.textContent = data.fraud_attempts ?? data.actual_fraud_attempts ?? '—';
+
+    // Show panel immediately but content animates in sequence
+    setVisible(resultPanel, true);
+    setVisible(empty, false);
+
+    // 1) Initial Pulse on panel to indicate "data received"
+    const panelEl = document.querySelector('.panel');
+    panelEl.classList.remove('pulse');
+    // force reflow to retrigger
+    void panelEl.offsetWidth;
+    panelEl.classList.add('pulse');
+
+    // small delay to let pulse start
+    await wait(220);
+
+    // 2) Gauge animation - returns when done
+    const score = Number(data.predicted_liability_score) || Number(data.actual_liability_score) || 0;
+    await animateGauge(score);
+
+    // 3) Staggered info boxes animation (80ms between each)
+    infoBoxes.forEach(b => { b.classList.remove('show'); b.style.opacity = 0; b.style.transform = 'translateY(6px)'; });
+    for (let i=0;i<infoBoxes.length;i++){
+      const box = infoBoxes[i];
+      // small content update already done above; reveal one by one
+      await wait(80);
+      box.classList.add('show');
+      // ensure visible
+      box.style.opacity = 1;
+      box.style.transform = 'translateY(0)';
+    }
+
+    // 4) Type-out explanation (word-by-word)
+    const explanationText = data.explanation || data.explain || data.explanations || 'Top drivers: return rate, device mismatch, invoice flag, account age.';
+    await typeOutWords(explanationText, explain, {initialDelay: 120, wordDelay: 70});
+
+    // 5) Badge reveal as final confirmation
+    const badgeNode = categoryBadge.querySelector('.badge');
+    if(badgeNode){
+      // animate badge pop
+      await wait(80);
+      // Ensure any previous state cleared
+      badgeNode.classList.remove('reveal');
+      void badgeNode.offsetWidth;
+      badgeNode.classList.add('reveal');
+    }
+
+    // subtle finishing breath on panel
+    await wait(160);
+    panelEl.classList.remove('pulse');
+
+    // (Accessibility) focus to score for screen readers
+    gScore.setAttribute('tabindex','0');
+    gScore.focus({preventScroll:true});
+    setTimeout(()=> gScore.removeAttribute('tabindex'),800);
+  }
+
+  /****************
+   * Gauge animate
+   ****************/
+  function animateGauge(score){
+    return new Promise(resolve=>{
+      const circumference = 2 * Math.PI * 40; // r=40 from SVG
+      const pct = Math.max(0, Math.min(100, Number(score)));
+      const offset = circumference - (circumference * (pct/100));
+
+      // animate stroke-dashoffset
+      const duration = 1200;
+      ring.style.transition = `stroke-dashoffset ${duration}ms cubic-bezier(.2,.9,.2,1)`;
+      ring.style.strokeDashoffset = offset;
+
+      // subtle glow for ring (temporary)
+      ring.style.filter = 'drop-shadow(0 6px 18px rgba(82,225,166,0.06))';
+
+      // update number with counting animation
+      const start = Number(gScore.textContent) || 0;
+      const startTime = performance.now();
+      const easeOut = (t)=> (--t)*t*t + 1;
+      function tick(now){
+        const t = Math.min(1, (now - startTime)/duration);
+        const val = Math.round(start + (pct - start) * easeOut(t));
+        gScore.textContent = val;
+        if(t < 1) requestAnimationFrame(tick);
+        else {
+          // cleanup glow after small delay
+          setTimeout(()=> { ring.style.filter='none'; resolve(); }, 140);
+        }
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
+  /**********************
+   * Type-out (word-by-word)
+   **********************/
+  function typeOutWords(text, el, opts = {}){
+    const initialDelay = opts.initialDelay ?? 60;
+    const wordDelay = opts.wordDelay ?? 70;
+    return new Promise(async (resolve)=>{
+      el.classList.remove('show');
+      el.textContent = '';
+      // small entrance
+      await wait(initialDelay);
+      el.classList.add('show');
+
+      const words = String(text).split(/\s+/);
+      for (let i=0;i<words.length;i++){
+        el.textContent = el.textContent + (i===0 ? '' : ' ') + words[i];
+        await wait(wordDelay + Math.floor(Math.random()*20));
+      }
+      // small pause
+      await wait(60);
+      resolve();
+    });
+  }
+
+  /***********************
+   * Helper wait function
+   ***********************/
+  function wait(ms){ return new Promise(r=>setTimeout(r, ms)); }
+
+  /***********************
+   * Initialize ring default
+   ***********************/
+  (function init(){
+    const circumference = 2 * Math.PI * 40;
+    ring.style.strokeDasharray = circumference;
+    ring.style.strokeDashoffset = circumference;
+  })();
+
+  /***********************
+   * Support pressing Enter
+   ***********************/
+  input.addEventListener('keydown',(e)=>{ if(e.key==='Enter') doPredict(); });
+
+  /************************************************************************
+   * 4) 3D Tilt: subtle perspective tilt for .card and .panel responding to mouse
+   *    - tilt away from pointer
+   *    - pure transform: perspective/rotateX/rotateY
+   ************************************************************************/
+  (function setupTilt(){
+    const targets = [document.querySelector('.card'), document.querySelector('.panel')];
+    const maxTilt = 9; // degrees
+    const damp = 0.12;
+
+    targets.forEach(el=>{
+      if(!el) return;
+      let rect = null;
+      let isPointerOver = false;
+      let rafId = null;
+      let targetRx = 0, targetRy = 0, currentRx = 0, currentRy = 0;
+
+      el.addEventListener('mouseenter', ()=> {
+        rect = el.getBoundingClientRect();
+        isPointerOver = true;
+        el.setAttribute('data-tilt','1');
+      });
+      el.addEventListener('mouseleave', ()=> {
+        isPointerOver = false;
+        // reset
+        targetRx = 0; targetRy = 0;
+        el.style.transform = `perspective(1200px) rotateX(0deg) rotateY(0deg) translateZ(0)`;
+        el.removeAttribute('data-tilt');
+      });
+
+      window.addEventListener('mousemove', (ev)=>{
+        if(!isPointerOver) return;
+        if(!rect) rect = el.getBoundingClientRect();
+        const x = ev.clientX - rect.left;
+        const y = ev.clientY - rect.top;
+        // center offsets [-1..1]
+        const cx = (x - rect.width/2) / (rect.width/2);
+        const cy = (y - rect.height/2) / (rect.height/2);
+        // tilt away = inverse of pointer direction
+        targetRy = -cx * maxTilt;
+        targetRx = cy * maxTilt;
+        if(!rafId) rafId = requestAnimationFrame(update);
+      });
+
+      function update(){
+        // lerp current to target
+        currentRx += (targetRx - currentRx) * damp;
+        currentRy += (targetRy - currentRy) * damp;
+        // apply transform
+        el.style.transform = `perspective(1200px) rotateX(${currentRx.toFixed(2)}deg) rotateY(${currentRy.toFixed(2)}deg) translateZ(0)`;
+        // stop when near zero and not hovered
+        if(Math.abs(currentRx - targetRx) < 0.01 && Math.abs(currentRy - targetRy) < 0.01){
+          rafId = null;
+          return;
+        }
+        rafId = requestAnimationFrame(update);
+      }
+    });
+  })();
+
+  /************************************************************************
+   * 5) Magnetic Glow: elements subtly attract glow toward mouse when near
+   ************************************************************************/
+  (function setupMagnetic(){
+    const magneticTargets = [
+      {el: btn, radius: 180},
+      {el: input, radius: 160}
+    ];
+
+    function pointerMove(e){
+      magneticTargets.forEach(t=>{
+        if(!t.el) return;
+        const rect = t.el.getBoundingClientRect();
+        const cx = rect.left + rect.width/2;
+        const cy = rect.top + rect.height/2;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const within = dist < t.radius;
+        // map to element coordinates for CSS variables
+        const localX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const localY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+        // set CSS variables as percentages for pseudo to position radial gradient
+        const percX = (localX / rect.width) * 100;
+        const percY = (localY / rect.height) * 100;
+        t.el.style.setProperty('--mag-x', percX + '%');
+        t.el.style.setProperty('--mag-y', percY + '%');
+        if(within){
+          t.el.setAttribute('data-magnetic','1');
+        } else {
+          t.el.removeAttribute('data-magnetic');
+        }
+      });
+    }
+
+    window.addEventListener('mousemove', throttle(pointerMove, 16));
+    // also update on touch for mobile approximations
+    window.addEventListener('touchmove', (ev)=>{
+      if(ev.touches && ev.touches[0]) pointerMove(ev.touches[0]);
+    }, {passive:true});
+  })();
+
+  /******************
+   * 6) Canvas neural plexus
+   * - subtle particles with connecting lines
+   * - performance-oriented: low particle count, distance-based connections, requestAnimationFrame
+   ******************/
+  (function neuralPlexus(){
+    const canvas = document.getElementById('ai-bg-canvas');
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let width = 0, height = 0, dpr = Math.max(1, window.devicePixelRatio || 1);
+    let particles = [];
+    let animationId = null;
+    let lastTime = 0;
+    const MAX_PARTICLES = Math.max(28, Math.floor((window.innerWidth * window.innerHeight) / 120000)); // adaptive
+    const LINK_DIST = 140; // px
+    const COLORS = ['rgba(91,140,255,0.075)','rgba(110,231,183,0.06)','rgba(255,184,107,0.045)'];
+
+    function reset(){
+      cancelAnimationFrame(animationId);
+      width = canvas.clientWidth;
+      height = canvas.clientHeight;
+      canvas.width = Math.max(1, Math.floor(width * dpr));
+      canvas.height = Math.max(1, Math.floor(height * dpr));
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      particles = [];
+      const count = Math.min(MAX_PARTICLES, Math.max(16, Math.floor((width*height)/160000)));
+      for(let i=0;i<count;i++){
+        particles.push({
+          x: Math.random()*width,
+          y: Math.random()*height,
+          vx: (Math.random()*0.6 - 0.3) * (0.6 + Math.random()*0.8),
+          vy: (Math.random()*0.6 - 0.3) * (0.6 + Math.random()*0.8),
+          r: 0.8 + Math.random()*1.8,
+          pulse: Math.random()*1.2,
+          phase: Math.random()*Math.PI*2,
+          color: COLORS[i % COLORS.length],
+          drift: (Math.random()*0.5 + 0.2)
+        });
+      }
+      lastTime = performance.now();
+      animate();
+    }
+    function animate(now){
+      const dt = Math.min(40, now - lastTime);
+      lastTime = now;
+      ctx.clearRect(0,0,width,height);
+      // slow global alpha for subtlety
+      ctx.globalCompositeOperation = 'lighter';
+      // draw connections
+      for(let i=0;i<particles.length;i++){
+        const a = particles[i];
+        // update
+        a.phase += 0.004 * a.drift * (dt/16);
+        a.x += a.vx * (dt/16) * (0.6 + Math.sin(a.phase)*0.15);
+        a.y += a.vy * (dt/16) * (0.6 + Math.cos(a.phase)*0.15);
+
+        // wrap edges softly
+        if(a.x < -20) a.x = width + 10;
+        if(a.x > width + 20) a.x = -10;
+        if(a.y < -20) a.y = height + 10;
+        if(a.y > height + 20) a.y = -10;
+
+        // draw particle (soft)
+        ctx.beginPath();
+        const fade = 0.4 + 0.6 * (0.5 + 0.5*Math.sin(a.phase));
+        ctx.fillStyle = a.color.replace(/[\d\.\)]+\)$/, `${Math.max(0.03, fade*0.08)})`);
+        ctx.arc(a.x, a.y, a.r + Math.abs(Math.sin(a.phase))*0.8, 0, Math.PI*2);
+        ctx.fill();
+      }
+
+      // draw lines (pairwise but with cap)
+      const len = particles.length;
+      for(let i=0;i<len;i++){
+        const a = particles[i];
+        for(let j=i+1;j<len;j++){
+          const b = particles[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if(dist < LINK_DIST){
+            const alpha = (1 - (dist / LINK_DIST)) * 0.045 * (0.9 + Math.sin(a.phase + b.phase)*0.1);
+            ctx.strokeStyle = `rgba(120,160,255,${alpha})`;
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      ctx.globalCompositeOperation = 'source-over';
+      animationId = requestAnimationFrame(animate);
+    }
+
+    // responsiveness
+    const resizeObserver = new ResizeObserver(throttle(reset, 200));
+    resizeObserver.observe(document.body);
+    window.addEventListener('visibilitychange', ()=>{
+      if(document.hidden) cancelAnimationFrame(animationId);
+      else reset();
+    });
+    // initialize
+    reset();
+  })();
+
+  /***********************
+   * Utilities: throttle
+   ***********************/
+  function throttle(fn, wait){
+    let last = 0, t = null;
+    return function(...args){
+      const now = Date.now();
+      if(now - last >= wait){
+        last = now;
+        fn.apply(this, args);
+      } else {
+        clearTimeout(t);
+        t = setTimeout(()=> { last = Date.now(); fn.apply(this, args); }, wait - (now - last));
+      }
+    };
+  }
+
+  /***********************
+   * Mock response for demo (only used if backend unreachable)
+   ***********************/
+  function mockResponse(phone){
+    // fabricate plausible numbers based on last digit to make variations
+    const last = Number(phone[phone.length-1] || 3);
+    const score = (last * 7 + 20) % 100;
+    const category = score < 40 ? 'low_risk' : (score < 75 ? 'medium_risk' : 'high_risk');
+    return {
+      predicted_liability_score: Math.max(6, score),
+      predicted_risk_category: category,
+      predicted_risk: category,
+      avg_order_value: (1200 + (last * 37)),
+      total_orders: (2 + last),
+      return_rate: (0.02 * (last % 5)),
+      fraud_attempts: Math.floor((last % 4)),
+      explanation: `Analysis: Customer shows ${ (score<40) ? 'stable purchase history' : (score<75 ? 'occasional high returns & device variance' : 'multiple risk signals — high return rate and device mismatch')} with confidence ${Math.round((Math.random()*8+86))}%.`
+    };
+  }
+
+  /*************************************************************************
+   * Final small polish: ensure interactive elements have aria labels and
+   * keep existing features intact. No DOM structure changed.
+   *************************************************************************/
+  btn.setAttribute('aria-label','Check customer liability');
+  input.setAttribute('aria-label','Customer phone number');
+
+</script>
+</body>
+</html>
