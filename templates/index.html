@@ -1002,9 +1002,7 @@
     };
   }
 
-  /***********************
-   * Mock response for demo (only used if backend unreachable)
-   ***********************/
+
   function mockResponse(phone){
     // fabricate plausible numbers based on last digit to make variations
     const last = Number(phone[phone.length-1] || 3);
@@ -1022,10 +1020,6 @@
     };
   }
 
-  /*************************************************************************
-   * Final small polish: ensure interactive elements have aria labels and
-   * keep existing features intact. No DOM structure changed.
-   *************************************************************************/
   btn.setAttribute('aria-label','Check customer liability');
   input.setAttribute('aria-label','Customer phone number');
 
